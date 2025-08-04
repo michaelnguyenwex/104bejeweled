@@ -92,6 +92,7 @@
     <div id="game-board"></div>
 
     <script src="images-base64.js"></script>
+    <script src="match-sound.js"></script>
     <script>
         // Wait for all resources to load before starting the game
         window.onload = function() {
@@ -111,8 +112,45 @@
             const gameBoard = document.getElementById('game-board');
             const scoreDisplay = document.getElementById('score-value');
 
-            // Initialize sound
-            const matchSound = new Audio('https://freesound.org/data/previews/387/387232_5121236-lq.mp3');
+            // Initialize sound with fallbacks
+            let matchSound;
+            
+            // Try to create audio with different sources
+            function createAudio() {
+                // Create audio element with multiple sources for better compatibility
+                matchSound = document.createElement('audio');
+                matchSound.volume = 0.5;
+                
+                // Try multiple different sound formats
+                const sources = [
+                    'https://freesound.org/data/previews/387/387232_5121236-lq.mp3',
+                    'https://www.soundjay.com/buttons/sounds/button-09.mp3',
+                    'https://www.soundjay.com/buttons/sounds/button-4.mp3'
+                ];
+                
+                for (const src of sources) {
+                    const sourceElement = document.createElement('source');
+                    sourceElement.src = src;
+                    sourceElement.type = src.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav';
+                    matchSound.appendChild(sourceElement);
+                }
+                
+                // Add to document to preload (but hidden)
+                matchSound.style.display = 'none';
+                document.body.appendChild(matchSound);
+                
+                // Fallback method using AudioContext if available
+                try {
+                    window.AudioContext = window.AudioContext || window.webkitAudioContext;
+                    const audioContext = new AudioContext();
+                    console.log("AudioContext available:", audioContext.state);
+                } catch (e) {
+                    console.log("AudioContext not supported in this browser");
+                }
+            }
+            
+            // Initialize audio
+            createAudio();
 
             // Initialize the game board
             function initBoard() {
@@ -284,8 +322,8 @@
                 }
 
                 if (hasMatches) {
-                    matchSound.currentTime = 0;
-                    matchSound.play().catch(error => console.log('Sound play failed:', error));
+                    // Play sound with fallback methods
+                    playMatchSound();
                     
                     // Wait for the explosion animation to finish before dropping gems
                     setTimeout(() => {
@@ -304,6 +342,56 @@
                 }
 
                 return hasMatches;
+            }
+            
+            // Play match sound with fallbacks
+            function playMatchSound() {
+                // Try the HTML5 Audio element first
+                if (matchSound) {
+                    try {
+                        matchSound.currentTime = 0;
+                        const playPromise = matchSound.play();
+                        
+                        if (playPromise !== undefined) {
+                            playPromise.catch(error => {
+                                console.log('Sound play failed, trying alternative:', error);
+                                playFallbackSound();
+                            });
+                        }
+                    } catch (e) {
+                        console.log('Error playing sound:', e);
+                        playFallbackSound();
+                    }
+                } else {
+                    playFallbackSound();
+                }
+            }
+            
+            // Fallback sound method using beep
+            function playFallbackSound() {
+                // Try oscillator beep first
+                try {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    const context = new AudioContext();
+                    const oscillator = context.createOscillator();
+                    const gainNode = context.createGain();
+                    
+                    oscillator.type = 'sine';
+                    oscillator.frequency.value = 440; // A4 note
+                    gainNode.gain.value = 0.1;
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(context.destination);
+                    
+                    oscillator.start(0);
+                    oscillator.stop(context.currentTime + 0.1); // Short beep
+                } catch (e) {
+                    console.log('Oscillator fallback sound failed:', e);
+                    // Try the base64 encoded sound from match-sound.js
+                    if (typeof playBase64Sound === 'function') {
+                        playBase64Sound();
+                    }
+                }
             }
 
             // Create particle effects
@@ -360,7 +448,7 @@
             // Start the game
             console.log("Starting game with gem keys:", GEM_KEYS);
             initBoard();
-        };
+        } // End of window.onload - no semicolon here
     </script>
 </body>
 </html>
