@@ -23,17 +23,18 @@
         .gem {
             width: 60px;
             height: 60px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 30px;
             cursor: pointer;
-            border-radius: 5px;
-            transition: transform 0.2s;
             position: relative;
             overflow: hidden;
         }
-        .gem:hover {
+        .gem img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 5px;
+            transition: transform 0.2s;
+        }
+        .gem:hover img {
             transform: scale(1.1);
         }
         .explosion {
@@ -62,7 +63,7 @@
         }
         @keyframes particleAnimation {
             0% { transform: scale(0) translate(0, 0); opacity: 1; }
-            100% { transform: scale(1) translate(20px, 20px); opacity: 0; }
+            100% { transform: scale(1) translate(var(--particle-x), var(--particle-y)); opacity: 0; }
         }
         #score {
             font-size: 24px;
@@ -79,8 +80,13 @@
     <div id="game-board"></div>
 
     <script>
-        const GRID_SIZE = 8;
-        const GEM_TYPES = ['🔴', '🔵', '🟢', '🟡', '🟣'];
+        const GEM_IMAGES = [
+            'https://via.placeholder.com/60/FF0000/FFFFFF?text=Red',
+            'https://via.placeholder.com/60/0000FF/FFFFFF?text=Blue',
+            'https://via.placeholder.com/60/00FF00/FFFFFF?text=Green',
+            'https://via.placeholder.com/60/FFFF00/FFFFFF?text=Yellow',
+            'https://via.placeholder.com/60/800080/FFFFFF?text=Purple'
+        ];
         let board = [];
         let score = 0;
         let selectedGem = null;
@@ -94,34 +100,37 @@
         // Initialize the game board
         function initBoard() {
             board = [];
-            for (let i = 0; i < GRID_SIZE; i++) {
+            for (let i = 0; i < 8; i++) {
                 board[i] = [];
-                for (let j = 0; j < GRID_SIZE; j++) {
+                for (let j = 0; j < 8; j++) {
                     board[i][j] = getRandomGem();
                 }
             }
             renderBoard();
-            checkMatches(); // Clear initial matches
+            checkMatches();
         }
 
-        // Get a random gem type
+        // Get a random gem image index
         function getRandomGem() {
-            return GEM_TYPES[Math.floor(Math.random() * GEM_TYPES.length)];
+            return Math.floor(Math.random() * GEM_IMAGES.length);
         }
 
-        // Render the game board
+        // Render the game board with images
         function renderBoard() {
             gameBoard.innerHTML = '';
-            for (let i = 0; i < GRID_SIZE; i++) {
-                for (let j = 0; j < GRID_SIZE; j++) {
+            for (let i = 0; i < 8; i++) {
+                for (let j = 0; j < 8; j++) {
                     const gem = document.createElement('div');
                     gem.classList.add('gem');
                     gem.dataset.row = i;
                     gem.dataset.col = j;
-                    gem.textContent = board[i][j];
+                    gem.dataset.type = board[i][j]; // Store gem type for matching
+                    const img = document.createElement('img');
+                    img.src = GEM_IMAGES[board[i][j]];
                     if (selectedGem && selectedGem.row === i && selectedGem.col === j) {
                         gem.classList.add('selected');
                     }
+                    gem.appendChild(img);
                     gem.addEventListener('click', handleGemClick);
                     gameBoard.appendChild(gem);
                 }
@@ -130,12 +139,12 @@
 
         // Handle gem clicks
         function handleGemClick(event) {
-            const row = parseInt(event.target.dataset.row);
-            const col = parseInt(event.target.dataset.col);
+            const row = parseInt(event.target.closest('.gem').dataset.row);
+            const col = parseInt(event.target.closest('.gem').dataset.col);
 
             if (!selectedGem) {
                 selectedGem = { row, col };
-                event.target.classList.add('selected');
+                event.target.closest('.gem').classList.add('selected');
             } else {
                 const prevRow = selectedGem.row;
                 const prevCol = selectedGem.col;
@@ -150,16 +159,15 @@
                 if (isAdjacent(row, col, prevRow, prevCol)) {
                     swapGems(row, col, prevRow, prevCol);
                     if (checkMatches()) {
-                        updateScore(100); // Points for a match
+                        updateScore(100);
                     } else {
-                        // Swap back if no match
                         swapGems(row, col, prevRow, prevCol);
                     }
                     selectedGem = null;
                     renderBoard();
                 } else {
                     selectedGem = { row, col };
-                    event.target.classList.add('selected');
+                    event.target.closest('.gem').classList.add('selected');
                 }
             }
         }
@@ -180,9 +188,9 @@
             let hasMatches = false;
 
             // Check horizontal matches
-            for (let i = 0; i < GRID_SIZE; i++) {
-                for (let j = 0; j < GRID_SIZE - 2; j++) {
-                    if (board[i][j] && board[i][j] === board[i][j + 1] && board[i][j] === board[i][j + 2]) {
+            for (let i = 0; i < 8; i++) {
+                for (let j = 0; j < 8 - 2; j++) {
+                    if (board[i][j] !== null && board[i][j] === board[i][j + 1] && board[i][j] === board[i][j + 2]) {
                         hasMatches = true;
                         for (let k = j; k < j + 3; k++) {
                             const gem = document.querySelector(`.gem[data-row="${i}"][data-col="${k}"]`);
@@ -191,7 +199,7 @@
                                 explosion.classList.add('explosion');
                                 gem.appendChild(explosion);
                                 createParticles(gem);
-                                gem.style.opacity = '0'; // Hide gem during explosion
+                                gem.querySelector('img').style.opacity = '0';
                             }
                             board[i][k] = null;
                         }
@@ -200,9 +208,9 @@
             }
 
             // Check vertical matches
-            for (let j = 0; j < GRID_SIZE; j++) {
-                for (let i = 0; i < GRID_SIZE - 2; i++) {
-                    if (board[i][j] && board[i][j] === board[i + 1][j] && board[i][j] === board[i + 2][j]) {
+            for (let j = 0; j < 8; j++) {
+                for (let i = 0; i < 8 - 2; i++) {
+                    if (board[i][j] !== null && board[i][j] === board[i + 1][j] && board[i][j] === board[i + 2][j]) {
                         hasMatches = true;
                         for (let k = i; k < i + 3; k++) {
                             const gem = document.querySelector(`.gem[data-row="${k}"][data-col="${j}"]`);
@@ -211,7 +219,7 @@
                                 explosion.classList.add('explosion');
                                 gem.appendChild(explosion);
                                 createParticles(gem);
-                                gem.style.opacity = '0'; // Hide gem during explosion
+                                gem.querySelector('img').style.opacity = '0';
                             }
                             board[k][j] = null;
                         }
@@ -220,11 +228,10 @@
             }
 
             if (hasMatches) {
-                // Play sound effect
-                matchSound.currentTime = 0; // Reset sound to start
+                matchSound.currentTime = 0;
                 matchSound.play().catch(error => console.log('Sound play failed:', error));
-                setTimeout(dropGems, 500); // Wait for explosion animation to complete
-                setTimeout(checkMatches, 600); // Recheck after dropping
+                setTimeout(dropGems, 500);
+                setTimeout(checkMatches, 600);
             }
 
             return hasMatches;
@@ -244,16 +251,15 @@
                 particle.style.setProperty('--particle-x', `${Math.cos(angle) * distance}px`);
                 particle.style.setProperty('--particle-y', `${Math.sin(angle) * distance}px`);
                 gem.appendChild(particle);
-                setTimeout(() => gem.removeChild(particle), 500); // Clean up particles
+                setTimeout(() => gem.removeChild(particle), 500);
             }
         }
 
         // Drop gems to fill empty spaces
         function dropGems() {
-            for (let j = 0; j < GRID_SIZE; j++) {
-                for (let i = GRID_SIZE - 1; i >= 0; i--) {
+            for (let j = 0; j < 8; j++) {
+                for (let i = 8 - 1; i >= 0; i--) {
                     if (board[i][j] === null) {
-                        // Move gems down
                         for (let k = i - 1; k >= 0; k--) {
                             if (board[k][j] !== null) {
                                 board[i][j] = board[k][j];
@@ -261,7 +267,6 @@
                                 break;
                             }
                         }
-                        // Fill top with new gem if needed
                         if (board[i][j] === null) {
                             board[i][j] = getRandomGem();
                         }
