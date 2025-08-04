@@ -79,212 +79,240 @@
     <div id="score">Score: <span id="score-value">0</span></div>
     <div id="game-board"></div>
 
+    <script src="images-base64.js"></script>
     <script>
-        const GEM_IMAGES = [
-            'https://raw.githubusercontent.com/michaelnguyenwex/104bejeweled/main/images/drop.png',
-            'https://raw.githubusercontent.com/michaelnguyenwex/104bejeweled/main/images/card.png',
-            'https://raw.githubusercontent.com/michaelnguyenwex/104bejeweled/main/images/hat.png',
-            'https://raw.githubusercontent.com/michaelnguyenwex/104bejeweled/main/images/pump.png',
-            'https://raw.githubusercontent.com/michaelnguyenwex/104bejeweled/main/images/receipt.png',
-            'https://raw.githubusercontent.com/michaelnguyenwex/104bejeweled/main/images/route.png'
-        ];
-        let board = [];
-        let score = 0;
-        let selectedGem = null;
+        // Wait for all resources to load before starting the game
+        window.onload = function() {
+            // Validate GEM_IMAGES is loaded
+            if (typeof GEM_IMAGES === 'undefined') {
+                console.error("GEM_IMAGES is not defined. Please check images-base64.js");
+                alert("Failed to load game images. Please refresh the page.");
+                return;
+            }
 
-        const gameBoard = document.getElementById('game-board');
-        const scoreDisplay = document.getElementById('score-value');
+            // Game variables
+            const GEM_KEYS = Object.keys(GEM_IMAGES); // Get keys directly from GEM_IMAGES
+            let board = [];
+            let score = 0;
+            let selectedGem = null;
+            
+            const gameBoard = document.getElementById('game-board');
+            const scoreDisplay = document.getElementById('score-value');
 
-        // Initialize sound
-        const matchSound = new Audio('https://freesound.org/data/previews/387/387232_5121236-lq.mp3');
+            // Initialize sound
+            const matchSound = new Audio('https://freesound.org/data/previews/387/387232_5121236-lq.mp3');
 
-        // Initialize the game board
-        function initBoard() {
-            board = [];
-            for (let i = 0; i < 8; i++) {
-                board[i] = [];
-                for (let j = 0; j < 8; j++) {
-                    board[i][j] = getRandomGem();
+            // Initialize the game board
+            function initBoard() {
+                board = [];
+                for (let i = 0; i < 8; i++) {
+                    board[i] = [];
+                    for (let j = 0; j < 8; j++) {
+                        board[i][j] = getRandomGem();
+                    }
+                }
+                renderBoard();
+                checkMatches();
+            }
+
+            // Get a random gem type
+            function getRandomGem() {
+                const index = Math.floor(Math.random() * GEM_KEYS.length);
+                return GEM_KEYS[index];
+            }
+
+            // Render the game board with images
+            function renderBoard() {
+                gameBoard.innerHTML = '';
+                for (let i = 0; i < 8; i++) {
+                    for (let j = 0; j < 8; j++) {
+                        const gem = document.createElement('div');
+                        gem.classList.add('gem');
+                        gem.dataset.row = i;
+                        gem.dataset.col = j;
+                        gem.dataset.type = board[i][j]; // Store gem type for matching
+                        
+                        const img = document.createElement('img');
+                        const gemKey = board[i][j];
+                        
+                        // Validate the image exists for this key
+                        if (GEM_IMAGES[gemKey]) {
+                            img.src = GEM_IMAGES[gemKey];
+                        } else {
+                            console.error(`Missing image for gem key: ${gemKey}`);
+                            img.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAEElEQVR42u3BAQEAAACCIP+vbkhAAQAAAO8GECAAAZf3V9cAAAAASUVORK5CYII='; // Fallback black image
+                        }
+                        
+                        if (selectedGem && selectedGem.row === i && selectedGem.col === j) {
+                            gem.classList.add('selected');
+                        }
+                        
+                        gem.appendChild(img);
+                        gem.addEventListener('click', handleGemClick);
+                        gameBoard.appendChild(gem);
+                    }
                 }
             }
-            renderBoard();
-            checkMatches();
-        }
 
-        // Get a random gem image index
-        function getRandomGem() {
-            return Math.floor(Math.random() * GEM_IMAGES.length);
-        }
+            // Handle gem clicks
+            function handleGemClick(event) {
+                // Make sure we get the gem element, not the image inside it
+                const gemElement = event.target.closest('.gem');
+                const row = parseInt(gemElement.dataset.row);
+                const col = parseInt(gemElement.dataset.col);
 
-        // Render the game board with images
-        function renderBoard() {
-            gameBoard.innerHTML = '';
-            for (let i = 0; i < 8; i++) {
-                for (let j = 0; j < 8; j++) {
-                    const gem = document.createElement('div');
-                    gem.classList.add('gem');
-                    gem.dataset.row = i;
-                    gem.dataset.col = j;
-                    gem.dataset.type = board[i][j]; // Store gem type for matching
-                    const img = document.createElement('img');
-                    img.src = GEM_IMAGES[board[i][j]];
-                    if (selectedGem && selectedGem.row === i && selectedGem.col === j) {
-                        gem.classList.add('selected');
-                    }
-                    gem.appendChild(img);
-                    gem.addEventListener('click', handleGemClick);
-                    gameBoard.appendChild(gem);
-                }
-            }
-        }
-
-        // Handle gem clicks
-        function handleGemClick(event) {
-            const row = parseInt(event.target.closest('.gem').dataset.row);
-            const col = parseInt(event.target.closest('.gem').dataset.col);
-
-            if (!selectedGem) {
-                selectedGem = { row, col };
-                event.target.closest('.gem').classList.add('selected');
-            } else {
-                const prevRow = selectedGem.row;
-                const prevCol = selectedGem.col;
-
-                // Clear previous selection
-                const prevSelected = document.querySelector(`.gem[data-row="${prevRow}"][data-col="${prevCol}"]`);
-                if (prevSelected) {
-                    prevSelected.classList.remove('selected');
-                }
-
-                // Check if the clicked gem is adjacent to the selected gem
-                if (isAdjacent(row, col, prevRow, prevCol)) {
-                    swapGems(row, col, prevRow, prevCol);
-                    if (checkMatches()) {
-                        updateScore(100);
-                    } else {
-                        swapGems(row, col, prevRow, prevCol);
-                    }
-                    selectedGem = null;
-                    renderBoard();
-                } else {
+                if (!selectedGem) {
                     selectedGem = { row, col };
-                    event.target.closest('.gem').classList.add('selected');
-                }
-            }
-        }
+                    gemElement.classList.add('selected');
+                } else {
+                    const prevRow = selectedGem.row;
+                    const prevCol = selectedGem.col;
 
-        // Check if two gems are adjacent
-        function isAdjacent(row1, col1, row2, col2) {
-            return (Math.abs(row1 - row2) === 1 && col1 === col2) || 
-                   (Math.abs(col1 - col2) === 1 && row1 === row2);
-        }
+                    // Clear previous selection
+                    const prevSelected = document.querySelector(`.gem[data-row="${prevRow}"][data-col="${prevCol}"]`);
+                    if (prevSelected) {
+                        prevSelected.classList.remove('selected');
+                    }
 
-        // Swap two gems
-        function swapGems(row1, col1, row2, col2) {
-            [board[row1][col1], board[row2][col2]] = [board[row2][col2], board[row1][col1]];
-        }
-
-        // Check for matches and remove them
-        function checkMatches() {
-            let hasMatches = false;
-
-            // Check horizontal matches
-            for (let i = 0; i < 8; i++) {
-                for (let j = 0; j < 8 - 2; j++) {
-                    if (board[i][j] !== null && board[i][j] === board[i][j + 1] && board[i][j] === board[i][j + 2]) {
-                        hasMatches = true;
-                        for (let k = j; k < j + 3; k++) {
-                            const gem = document.querySelector(`.gem[data-row="${i}"][data-col="${k}"]`);
-                            if (gem) {
-                                const explosion = document.createElement('div');
-                                explosion.classList.add('explosion');
-                                gem.appendChild(explosion);
-                                createParticles(gem);
-                                gem.querySelector('img').style.opacity = '0';
-                            }
-                            board[i][k] = null;
+                    // Check if the clicked gem is adjacent to the selected gem
+                    if (isAdjacent(row, col, prevRow, prevCol)) {
+                        swapGems(row, col, prevRow, prevCol);
+                        if (checkMatches()) {
+                            updateScore(100);
+                        } else {
+                            // Swap back if no matches
+                            swapGems(row, col, prevRow, prevCol);
                         }
+                        selectedGem = null;
+                        renderBoard();
+                    } else {
+                        // Select the new gem
+                        selectedGem = { row, col };
+                        gemElement.classList.add('selected');
                     }
                 }
             }
 
-            // Check vertical matches
-            for (let j = 0; j < 8; j++) {
-                for (let i = 0; i < 8 - 2; i++) {
-                    if (board[i][j] !== null && board[i][j] === board[i + 1][j] && board[i][j] === board[i + 2][j]) {
-                        hasMatches = true;
-                        for (let k = i; k < i + 3; k++) {
-                            const gem = document.querySelector(`.gem[data-row="${k}"][data-col="${j}"]`);
-                            if (gem) {
-                                const explosion = document.createElement('div');
-                                explosion.classList.add('explosion');
-                                gem.appendChild(explosion);
-                                createParticles(gem);
-                                gem.querySelector('img').style.opacity = '0';
+            // Check if two gems are adjacent
+            function isAdjacent(row1, col1, row2, col2) {
+                return (Math.abs(row1 - row2) === 1 && col1 === col2) || 
+                       (Math.abs(col1 - col2) === 1 && row1 === row2);
+            }
+
+            // Swap two gems
+            function swapGems(row1, col1, row2, col2) {
+                [board[row1][col1], board[row2][col2]] = [board[row2][col2], board[row1][col1]];
+            }
+
+            // Check for matches and remove them
+            function checkMatches() {
+                let hasMatches = false;
+
+                // Check horizontal matches
+                for (let i = 0; i < 8; i++) {
+                    for (let j = 0; j < 8 - 2; j++) {
+                        if (board[i][j] !== null && board[i][j] === board[i][j + 1] && board[i][j] === board[i][j + 2]) {
+                            hasMatches = true;
+                            for (let k = j; k < j + 3; k++) {
+                                const gem = document.querySelector(`.gem[data-row="${i}"][data-col="${k}"]`);
+                                if (gem) {
+                                    const explosion = document.createElement('div');
+                                    explosion.classList.add('explosion');
+                                    gem.appendChild(explosion);
+                                    createParticles(gem);
+                                    gem.querySelector('img').style.opacity = '0';
+                                }
+                                board[i][k] = null;
                             }
-                            board[k][j] = null;
                         }
                     }
                 }
-            }
 
-            if (hasMatches) {
-                matchSound.currentTime = 0;
-                matchSound.play().catch(error => console.log('Sound play failed:', error));
-                setTimeout(dropGems, 500);
-                setTimeout(checkMatches, 600);
-            }
-
-            return hasMatches;
-        }
-
-        // Create particle effects
-        function createParticles(gem) {
-            const particleCount = 5;
-            for (let i = 0; i < particleCount; i++) {
-                const particle = document.createElement('div');
-                particle.classList.add('particle');
-                particle.style.left = `${Math.random() * 60}px`;
-                particle.style.top = `${Math.random() * 60}px`;
-                particle.style.animationDelay = `${Math.random() * 0.2}s`;
-                const angle = Math.random() * 360;
-                const distance = Math.random() * 20 + 10;
-                particle.style.setProperty('--particle-x', `${Math.cos(angle) * distance}px`);
-                particle.style.setProperty('--particle-y', `${Math.sin(angle) * distance}px`);
-                gem.appendChild(particle);
-                setTimeout(() => gem.removeChild(particle), 500);
-            }
-        }
-
-        // Drop gems to fill empty spaces
-        function dropGems() {
-            for (let j = 0; j < 8; j++) {
-                for (let i = 8 - 1; i >= 0; i--) {
-                    if (board[i][j] === null) {
-                        for (let k = i - 1; k >= 0; k--) {
-                            if (board[k][j] !== null) {
-                                board[i][j] = board[k][j];
+                // Check vertical matches
+                for (let j = 0; j < 8; j++) {
+                    for (let i = 0; i < 8 - 2; i++) {
+                        if (board[i][j] !== null && board[i][j] === board[i + 1][j] && board[i][j] === board[i + 2][j]) {
+                            hasMatches = true;
+                            for (let k = i; k < i + 3; k++) {
+                                const gem = document.querySelector(`.gem[data-row="${k}"][data-col="${j}"]`);
+                                if (gem) {
+                                    const explosion = document.createElement('div');
+                                    explosion.classList.add('explosion');
+                                    gem.appendChild(explosion);
+                                    createParticles(gem);
+                                    gem.querySelector('img').style.opacity = '0';
+                                }
                                 board[k][j] = null;
-                                break;
                             }
-                        }
-                        if (board[i][j] === null) {
-                            board[i][j] = getRandomGem();
                         }
                     }
                 }
+
+                if (hasMatches) {
+                    matchSound.currentTime = 0;
+                    matchSound.play().catch(error => console.log('Sound play failed:', error));
+                    setTimeout(dropGems, 500);
+                    setTimeout(checkMatches, 600);
+                }
+
+                return hasMatches;
             }
-            renderBoard();
-        }
 
-        // Update the score
-        function updateScore(points) {
-            score += points;
-            scoreDisplay.textContent = score;
-        }
+            // Create particle effects
+            function createParticles(gem) {
+                const particleCount = 5;
+                for (let i = 0; i < particleCount; i++) {
+                    const particle = document.createElement('div');
+                    particle.classList.add('particle');
+                    particle.style.left = `${Math.random() * 60}px`;
+                    particle.style.top = `${Math.random() * 60}px`;
+                    particle.style.animationDelay = `${Math.random() * 0.2}s`;
+                    const angle = Math.random() * 360;
+                    const distance = Math.random() * 20 + 10;
+                    particle.style.setProperty('--particle-x', `${Math.cos(angle) * distance}px`);
+                    particle.style.setProperty('--particle-y', `${Math.sin(angle) * distance}px`);
+                    gem.appendChild(particle);
+                    setTimeout(() => {
+                        if (gem.contains(particle)) { // Check if particle still exists in DOM
+                            gem.removeChild(particle);
+                        }
+                    }, 500);
+                }
+            }
 
-        // Start the game
-        initBoard();
+            // Drop gems to fill empty spaces
+            function dropGems() {
+                for (let j = 0; j < 8; j++) {
+                    for (let i = 8 - 1; i >= 0; i--) {
+                        if (board[i][j] === null) {
+                            // Look for a gem above to drop down
+                            for (let k = i - 1; k >= 0; k--) {
+                                if (board[k][j] !== null) {
+                                    board[i][j] = board[k][j];
+                                    board[k][j] = null;
+                                    break;
+                                }
+                            }
+                            // If no gems above, create a new one
+                            if (board[i][j] === null) {
+                                board[i][j] = getRandomGem();
+                            }
+                        }
+                    }
+                }
+                renderBoard();
+            }
+
+            // Update the score
+            function updateScore(points) {
+                score += points;
+                scoreDisplay.textContent = score;
+            }
+
+            // Start the game
+            console.log("Starting game with gem keys:", GEM_KEYS);
+            initBoard();
+        };
     </script>
 </body>
 </html>
