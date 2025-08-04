@@ -47,11 +47,20 @@
             background: radial-gradient(circle, rgba(255, 215, 0, 0.8) 0%, rgba(255, 165, 0, 0) 70%);
             border-radius: 5px;
             z-index: 1;
+            pointer-events: none;
         }
         @keyframes explosionEffect {
             0% { transform: scale(0); opacity: 1; box-shadow: 0 0 20px rgba(255, 215, 0, 0.8); }
             50% { transform: scale(1.5); opacity: 0.7; box-shadow: 0 0 30px rgba(255, 165, 0, 0.6); }
             100% { transform: scale(2); opacity: 0; box-shadow: none; }
+        }
+        .removing img {
+            animation: removeGem 0.5s ease-out forwards;
+        }
+        @keyframes removeGem {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(0.8); opacity: 0.3; }
         }
         .particle {
             position: absolute;
@@ -60,9 +69,12 @@
             background: radial-gradient(circle, #ffeb3b, #ff9800);
             border-radius: 50%;
             animation: particleAnimation 0.5s ease-out forwards;
+            z-index: 2;
+            pointer-events: none;
         }
         @keyframes particleAnimation {
             0% { transform: scale(0) translate(0, 0); opacity: 1; }
+            50% { transform: scale(1.2) translate(calc(var(--particle-x) * 0.5), calc(var(--particle-y) * 0.5)); opacity: 0.8; }
             100% { transform: scale(1) translate(var(--particle-x), var(--particle-y)); opacity: 0; }
         }
         #score {
@@ -121,6 +133,11 @@
                 return GEM_KEYS[index];
             }
 
+            // Check if a gem is marked for removal
+            function isMarkedForRemoval(gemValue) {
+                return gemValue && typeof gemValue === 'string' && gemValue.startsWith('marked-for-removal:');
+            }
+
             // Render the game board with images
             function renderBoard() {
                 gameBoard.innerHTML = '';
@@ -135,9 +152,21 @@
                         const img = document.createElement('img');
                         const gemKey = board[i][j];
                         
+                        // Handle marked gems
+                        let actualKey = gemKey;
+                        if (isMarkedForRemoval(gemKey)) {
+                            // Extract the original gem key
+                            actualKey = gemKey.substring('marked-for-removal:'.length);
+                            gem.classList.add('removing'); // Add class for visual effect
+                        }
+                        
                         // Validate the image exists for this key
-                        if (GEM_IMAGES[gemKey]) {
-                            img.src = GEM_IMAGES[gemKey];
+                        if (GEM_IMAGES[actualKey]) {
+                            img.src = GEM_IMAGES[actualKey];
+                            // If it's marked for removal, apply opacity
+                            if (isMarkedForRemoval(gemKey)) {
+                                img.style.opacity = '0.3';
+                            }
                         } else {
                             console.error(`Missing image for gem key: ${gemKey}`);
                             img.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAEElEQVR42u3BAQEAAACCIP+vbkhAAQAAAO8GECAAAZf3V9cAAAAASUVORK5CYII='; // Fallback black image
@@ -213,6 +242,7 @@
                     for (let j = 0; j < 8 - 2; j++) {
                         if (board[i][j] !== null && board[i][j] === board[i][j + 1] && board[i][j] === board[i][j + 2]) {
                             hasMatches = true;
+                            // Mark these positions for removal but don't remove immediately
                             for (let k = j; k < j + 3; k++) {
                                 const gem = document.querySelector(`.gem[data-row="${i}"][data-col="${k}"]`);
                                 if (gem) {
@@ -220,9 +250,11 @@
                                     explosion.classList.add('explosion');
                                     gem.appendChild(explosion);
                                     createParticles(gem);
-                                    gem.querySelector('img').style.opacity = '0';
+                                    // Just fade the image but keep it visible for the animation
+                                    gem.querySelector('img').style.opacity = '0.3';
                                 }
-                                board[i][k] = null;
+                                // Mark for removal instead of setting to null immediately
+                                board[i][k] = 'marked-for-removal:' + board[i][k];
                             }
                         }
                     }
@@ -233,6 +265,7 @@
                     for (let i = 0; i < 8 - 2; i++) {
                         if (board[i][j] !== null && board[i][j] === board[i + 1][j] && board[i][j] === board[i + 2][j]) {
                             hasMatches = true;
+                            // Mark these positions for removal but don't remove immediately
                             for (let k = i; k < i + 3; k++) {
                                 const gem = document.querySelector(`.gem[data-row="${k}"][data-col="${j}"]`);
                                 if (gem) {
@@ -240,9 +273,11 @@
                                     explosion.classList.add('explosion');
                                     gem.appendChild(explosion);
                                     createParticles(gem);
-                                    gem.querySelector('img').style.opacity = '0';
+                                    // Just fade the image but keep it visible for the animation
+                                    gem.querySelector('img').style.opacity = '0.3';
                                 }
-                                board[k][j] = null;
+                                // Mark for removal instead of setting to null immediately
+                                board[k][j] = 'marked-for-removal:' + board[k][j];
                             }
                         }
                     }
@@ -251,8 +286,21 @@
                 if (hasMatches) {
                     matchSound.currentTime = 0;
                     matchSound.play().catch(error => console.log('Sound play failed:', error));
-                    setTimeout(dropGems, 500);
-                    setTimeout(checkMatches, 600);
+                    
+                    // Wait for the explosion animation to finish before dropping gems
+                    setTimeout(() => {
+                        // Actually remove all marked gems
+                        for (let i = 0; i < 8; i++) {
+                            for (let j = 0; j < 8; j++) {
+                                if (board[i][j] && typeof board[i][j] === 'string' && 
+                                    board[i][j].startsWith('marked-for-removal:')) {
+                                    board[i][j] = null;
+                                }
+                            }
+                        }
+                        dropGems();
+                        setTimeout(checkMatches, 100);
+                    }, 500);
                 }
 
                 return hasMatches;
@@ -260,15 +308,15 @@
 
             // Create particle effects
             function createParticles(gem) {
-                const particleCount = 5;
+                const particleCount = 8; // Increased number of particles
                 for (let i = 0; i < particleCount; i++) {
                     const particle = document.createElement('div');
                     particle.classList.add('particle');
                     particle.style.left = `${Math.random() * 60}px`;
                     particle.style.top = `${Math.random() * 60}px`;
                     particle.style.animationDelay = `${Math.random() * 0.2}s`;
-                    const angle = Math.random() * 360;
-                    const distance = Math.random() * 20 + 10;
+                    const angle = Math.random() * Math.PI * 2; // Full 360 degrees in radians
+                    const distance = Math.random() * 30 + 10; // Increased distance
                     particle.style.setProperty('--particle-x', `${Math.cos(angle) * distance}px`);
                     particle.style.setProperty('--particle-y', `${Math.sin(angle) * distance}px`);
                     gem.appendChild(particle);
